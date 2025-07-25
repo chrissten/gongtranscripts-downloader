@@ -7,7 +7,6 @@ A tool to bulk download call transcripts from Gong.io for analysis and content c
 import asyncio
 import sys
 from pathlib import Path
-from datetime import datetime
 
 import click
 from rich.console import Console
