@@ -7,6 +7,7 @@ A tool to bulk download call transcripts from Gong.io for analysis and content c
 import asyncio
 import sys
 from pathlib import Path
+from datetime import datetime
 
 import click
 from rich.console import Console
@@ -37,7 +38,8 @@ def cli():
 @click.option('--end-date', help='End date (YYYY-MM-DD). Overrides env variable.')
 @click.option('--output-dir', help='Output directory. Overrides env variable.')
 @click.option('--dry-run', is_flag=True, help='Show what would be downloaded without actually downloading.')
-def download(start_date, end_date, output_dir, dry_run):
+@click.option('--title-filter', default=None, help="Filter calls by title keywords. Use 'and' for all keywords (e.g., 'identity and demo'), or separate by comma/space for any keyword (e.g., 'empi,demo' or 'empi demo').")
+def download(start_date, end_date, output_dir, dry_run, title_filter):
     """Download transcripts from Gong."""
     try:
         # Load configuration
@@ -70,8 +72,8 @@ def download(start_date, end_date, output_dir, dry_run):
         console.print(f"[blue]Starting download for date range: {config.download_start_date} to {config.download_end_date}[/blue]")
         
         # Run async download
-        summary = asyncio.run(downloader.download_all_transcripts())
-        
+        summary = asyncio.run(downloader.download_all_transcripts(title_filter=title_filter))
+                
         console.print(f"\n[bold green]✅ Download completed![/bold green]")
         console.print(f"Check your transcripts in: {config.output_directory}")
         
@@ -180,7 +182,8 @@ For more help, visit: https://github.com/your-repo/gong-transcripts-downloader
               type=click.Choice(['json', 'csv', 'txt'], case_sensitive=False),
               default='csv',
               help='Output format for the list')
-def list_calls(output_format):
+@click.option('--title-filter', default=None, help="Filter calls by title keywords. Use 'and' for all keywords (e.g., 'identity and demo'), or separate by comma/space for any keyword (e.g., 'empi,demo' or 'empi demo').")
+def list_calls(output_format, title_filter):
     """List calls in the configured date range without downloading transcripts."""
     try:
         config = load_config()
@@ -203,6 +206,30 @@ def list_calls(output_format):
         
         if not calls:
             console.print("[yellow]No calls found in the specified date range.[/yellow]")
+            return
+        
+        # --- Title filtering logic ---
+        def filter_calls_by_title(calls, title_filter):
+            if not title_filter:
+                return calls
+            filter_str = title_filter.strip().lower()
+            if ' and ' in filter_str:
+                keywords = [k.strip() for k in filter_str.split(' and ') if k.strip()]
+                def match(title):
+                    t = (title or '').lower()
+                    return all(kw in t for kw in keywords)
+            else:
+                # Split by comma or whitespace
+                keywords = [k.strip() for k in filter_str.replace(',', ' ').split() if k.strip()]
+                def match(title):
+                    t = (title or '').lower()
+                    return any(kw in t for kw in keywords)
+            return [call for call in calls if match(call.get('title', ''))]
+        
+        calls = filter_calls_by_title(calls, title_filter)
+        
+        if not calls:
+            console.print("[yellow]No calls matched the title filter.[/yellow]")
             return
         
         # Output in requested format

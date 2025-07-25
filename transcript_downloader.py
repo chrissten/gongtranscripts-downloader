@@ -86,7 +86,7 @@ class TranscriptDownloader:
         logger.info(f"Output directory: {self.output_path}")
         logger.info(f"Date range: {self.config.download_start_date} to {self.config.download_end_date}")
     
-    async def download_all_transcripts(self) -> Dict[str, Any]:
+    async def download_all_transcripts(self, title_filter: str = None) -> Dict[str, Any]:
         """
         Main method to download all transcripts in the specified date range.
         
@@ -108,6 +108,20 @@ class TranscriptDownloader:
                 # Step 1: Get all calls in date range
                 console.print("\n[bold yellow]Step 1:[/bold yellow] Discovering calls...")
                 calls = await self.get_calls_with_resume(client, progress_data)
+                # --- Title filtering logic ---
+                if title_filter:
+                    filter_str = title_filter.strip().lower()
+                    if ' and ' in filter_str:
+                        keywords = [k.strip() for k in filter_str.split(' and ') if k.strip()]
+                        def match(title):
+                            t = (title or '').lower()
+                            return all(kw in t for kw in keywords)
+                    else:
+                        keywords = [k.strip() for k in filter_str.replace(',', ' ').split() if k.strip()]
+                        def match(title):
+                            t = (title or '').lower()
+                            return any(kw in t for kw in keywords)
+                    calls = [call for call in calls if match(call.get('title', ''))]
                 
                 if not calls:
                     console.print("[yellow]No calls found in the specified date range.[/yellow]")
